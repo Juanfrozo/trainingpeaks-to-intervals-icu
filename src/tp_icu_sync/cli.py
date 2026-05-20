@@ -78,9 +78,9 @@ def main(argv: list[str] | None = None) -> int:
 
     mode = "DRY-RUN" if args.dry_run else "APPLIED"
     print(
-        f"\n[{mode}] created={len(result.created)} updated={len(result.updated)} "
-        f"deleted={len(result.deleted)} unchanged={len(result.unchanged)} "
-        f"activity_desc={len(result.activity_updates)}"
+        f"\n[{mode}] created={result.created} updated={result.updated} "
+        f"deleted={result.deleted} unchanged={result.unchanged} "
+        f"activity_desc={result.activity_updates}"
     )
     if result.errors:
         print(f"ERRORS ({len(result.errors)}):", file=sys.stderr)

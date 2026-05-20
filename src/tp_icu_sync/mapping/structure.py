@@ -168,7 +168,7 @@ def _convert_to_absolute(
 
 def _metric_to_icu(metric: str, icu_type: str) -> tuple[str | None, str]:
     """Map TP intensity metric to icu (key, units). Remaps to sport-appropriate key."""
-    if metric in {"percentofftp"}:
+    if metric == "percentofftp":
         if icu_type in POWER_SPORTS:
             return ("power", "%ftp")
         if icu_type in {"Run", "VirtualRun"}:
@@ -176,13 +176,13 @@ def _metric_to_icu(metric: str, icu_type: str) -> tuple[str | None, str]:
         return ("hr", "%lthr")
     if metric in {"watts", "power"}:
         return ("power", "w")
-    if metric in {"percentofthresholdhr"}:
+    if metric == "percentofthresholdhr":
         return ("hr", "%lthr")
-    if metric in {"percentofmaxhr"}:
+    if metric == "percentofmaxhr":
         return ("hr", "%hr")
     if metric in {"heartrate", "bpm"}:
         return ("hr", "bpm")
-    if metric in {"percentofthresholdpace"}:
+    if metric == "percentofthresholdpace":
         if icu_type in PACE_SPORTS:
             return ("pace", "%pace")
         return ("hr", "%lthr")  # weird mix, fall back
@@ -304,9 +304,9 @@ def render_workout_text(
         if block.length and (block.length.get("unit") or "").lower() == "repetition":
             reps = int(block.length.get("value") or 1)
         rendered = [
-            _step_text(s, metric, icu_type, thresholds)
+            text
             for s in block.steps
-            if _step_text(s, metric, icu_type, thresholds)
+            if (text := _step_text(s, metric, icu_type, thresholds))
         ]
         if not rendered:
             continue

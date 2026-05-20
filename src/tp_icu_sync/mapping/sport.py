@@ -1,22 +1,17 @@
-"""TrainingPeaks sport (workoutTypeValueId) -> intervals.icu event `type` string.
+"""TrainingPeaks sport (workoutTypeValueId / workoutSubTypeId) -> intervals.icu
+event `type` string.
 
-icu event types we use: Ride, VirtualRide, MountainBikeRide, Run, VirtualRun,
-TrailRun, Swim, Walk, Hike, WeightTraining, Workout, NordicSki, AlpineSki,
-BackcountrySki, Rowing.
+icu event types we emit: Ride, VirtualRide, MountainBikeRide, Run, VirtualRun,
+Swim, Walk, Hike, WeightTraining, Workout, NordicSki, Rowing.
 
 TP top-level IDs (from GET /fitness/v6/workouttypes):
   1 Swim, 2 Bike, 3 Run, 4 Brick, 5 Crosstrain, 6 Race, 7 Day Off,
   8 Mountain Bike, 9 Strength, 10 Custom, 11 XC-Ski, 12 Rowing, 13 Walk,
   29 Strength, 100 Other.
 
-TP subtypes that warrant a more specific icu type:
-  6  Indoor Bike   -> VirtualRide
-  49 Virtual Bike  -> VirtualRide
-  13 Indoor Run    -> VirtualRun
-  50 Virtual Run   -> VirtualRun
-  12 Trail Run     -> TrailRun
-  41 Hike          -> Hike
-  39 Indoor Rowing -> Rowing
+Subtype overrides are applied first (subtype IDs are unique across sports in
+TP), then the parent type is consulted as a fallback. Unknown sports map to
+"Workout".
 """
 
 from __future__ import annotations
