@@ -32,6 +32,60 @@ logger = logging.getLogger(__name__)
 EXTERNAL_ID_PREFIX = "tp:"
 HASH_TAG_RE = re.compile(r"\[tp-sync hash=([0-9a-f]{12})\]")
 
+# TP workoutTypeValueId values that always mean "not a real workout".
+TP_TYPE_DAY_OFF = 7
+TP_TYPE_RACE = 6
+
+
+def _classify(w: TPWorkout) -> tuple[str, str | None]:
+    """Pick (icu_category, icu_type) for a TP workout.
+
+    - Day Off (7) -> NOTE without sport
+    - Race (6)   -> RACE_A, sport derived from workoutSubTypeId (default Run)
+    - Empty payload (no duration / distance / structure / tss) -> NOTE
+    - Anything else -> WORKOUT + sport mapping
+    """
+    if w.workoutTypeValueId == TP_TYPE_DAY_OFF:
+        return ("NOTE", None)
+    if w.workoutTypeValueId == TP_TYPE_RACE:
+        sport = tp_sport_to_icu_type(None, w.workoutSubTypeId)
+        if sport == "Workout":
+            sport = "Run"  # safe default for races without subtype
+        return ("RACE_A", sport)
+
+    has_content = bool(
+        w.totalTimePlanned
+        or w.distancePlanned
+        or w.structure
+        or w.tssPlanned
+    )
+    if not has_content:
+        return ("NOTE", None)
+
+    return ("WORKOUT", tp_sport_to_icu_type(w.workoutTypeValueId, w.workoutSubTypeId))
+
+
+def _format_comments(comments: list[dict[str, Any]]) -> str:
+    """Render TP workoutComments thread as bullet list."""
+    lines: list[str] = []
+    for c in comments:
+        text = (c.get("comment") or "").strip()
+        if not text:
+            continue
+        author = (
+            c.get("commentByPersonName")
+            or c.get("commentByName")
+            or c.get("authorName")
+            or "Comment"
+        )
+        when = c.get("dateAdded") or c.get("commentDate") or ""
+        when_short = when[:10] if isinstance(when, str) else ""
+        prefix = f"{author}"
+        if when_short:
+            prefix += f" ({when_short})"
+        lines.append(f"- {prefix}: {text}")
+    return "\n".join(lines)
+
 
 @dataclass
 class SyncResult:
@@ -51,60 +105,77 @@ def build_icu_payload(
     w: TPWorkout, thresholds: AthleteThresholds | None = None
 ) -> dict[str, Any]:
     """Translate a TP planned workout into an icu Event POST/PUT body."""
-    sport_type = tp_sport_to_icu_type(w.workoutTypeValueId)
-    workout_doc = render_workout_doc(w.structure, sport_type, thresholds)
+    category, sport_type = _classify(w)
+    is_note = category == "NOTE"
+
+    workout_doc = None if is_note else render_workout_doc(w.structure, sport_type or "", thresholds)
 
     body_lines: list[str] = []
     if w.description:
         body_lines.append(w.description.strip())
-    workout_text = render_workout_text(w.structure, sport_type, thresholds)
-    if workout_text:
+
+    if w.coachComments and w.coachComments.strip():
         if body_lines:
             body_lines.append("")
-        body_lines.append(workout_text)
-    if w.tssPlanned or w.ifPlanned:
-        body_lines.append("")
-        if w.tssPlanned:
-            body_lines.append(f"Planned TSS: {w.tssPlanned:.0f}")
-        if w.ifPlanned:
-            body_lines.append(f"Planned IF: {w.ifPlanned:.2f}")
+        body_lines.append("Coach:")
+        body_lines.append(w.coachComments.strip())
+
+    if w.workoutComments:
+        rendered = _format_comments(w.workoutComments)
+        if rendered:
+            if body_lines:
+                body_lines.append("")
+            body_lines.append("Comments:")
+            body_lines.append(rendered)
+
+    if not is_note:
+        workout_text = render_workout_text(w.structure, sport_type or "", thresholds)
+        if workout_text:
+            if body_lines:
+                body_lines.append("")
+            body_lines.append(workout_text)
+        if w.tssPlanned or w.ifPlanned:
+            body_lines.append("")
+            if w.tssPlanned:
+                body_lines.append(f"Planned TSS: {w.tssPlanned:.0f}")
+            if w.ifPlanned:
+                body_lines.append(f"Planned IF: {w.ifPlanned:.2f}")
 
     description = "\n".join(body_lines).rstrip()
-    h = _content_hash(w, description, sport_type, workout_doc)
+    h = _content_hash(w, description, category, sport_type, workout_doc)
     description = f"{description}\n\n[tp-sync hash={h}]".strip()
 
-    # Use planned start time if set, otherwise midnight of the workout day.
-    if w.startTimePlanned:
-        start_local = w.startTimePlanned
-    else:
-        start_local = f"{w.day.isoformat()}T00:00:00"
+    start_local = w.startTimePlanned or f"{w.day.isoformat()}T00:00:00"
 
     payload: dict[str, Any] = {
-        "category": "WORKOUT",
-        "type": sport_type,
+        "category": category,
         "start_date_local": start_local,
-        "name": w.title or "(untitled)",
+        "name": w.title or ("(note)" if is_note else "(untitled)"),
         "description": description,
         "external_id": f"{EXTERNAL_ID_PREFIX}{w.workoutId}",
-        "indoor": sport_type.startswith("Virtual"),
     }
+    if sport_type is not None:
+        payload["type"] = sport_type
+        payload["indoor"] = sport_type.startswith("Virtual")
     if workout_doc is not None:
         payload["workout_doc"] = workout_doc
-    if w.duration_seconds:
-        payload["moving_time"] = w.duration_seconds
-    if w.distancePlanned:
-        payload["distance"] = w.distancePlanned
-    if w.tssPlanned:
-        payload["icu_training_load"] = w.tssPlanned
-    if w.ifPlanned:
-        payload["icu_intensity"] = w.ifPlanned
+    if not is_note:
+        if w.duration_seconds:
+            payload["moving_time"] = w.duration_seconds
+        if w.distancePlanned:
+            payload["distance"] = w.distancePlanned
+        if w.tssPlanned:
+            payload["icu_training_load"] = w.tssPlanned
+        if w.ifPlanned:
+            payload["icu_intensity"] = w.ifPlanned
     return payload
 
 
 def _content_hash(
     w: TPWorkout,
     description: str,
-    sport_type: str,
+    category: str,
+    sport_type: str | None,
     workout_doc: dict[str, Any] | None,
 ) -> str:
     """Stable 12-char hash of the fields we mirror to icu.
@@ -118,6 +189,7 @@ def _content_hash(
         "day": w.day.isoformat(),
         "start": w.startTimePlanned,
         "title": w.title or "",
+        "category": category,
         "type": sport_type,
         "duration": w.duration_seconds,
         "distance": w.distancePlanned,
@@ -215,11 +287,16 @@ def run_sync(
         for wid, w in tp_by_id.items():
             payload = build_icu_payload(w, thresholds)
             new_hash = _content_hash(
-                w, payload["description"], payload["type"], payload.get("workout_doc")
+                w,
+                payload["description"],
+                payload["category"],
+                payload.get("type"),
+                payload.get("workout_doc"),
             )
             existing = ours.get(wid)
+            label = payload.get("type") or payload["category"]
             if existing is None:
-                logger.info("+ create %s [%s] %s", w.day, payload["type"], payload["name"])
+                logger.info("+ create %s [%s] %s", w.day, label, payload["name"])
                 if not dry_run:
                     try:
                         created = create_event(icu, payload)
@@ -236,7 +313,7 @@ def run_sync(
                 result.unchanged.append(existing.id or 0)
                 continue
 
-            logger.info("~ update %s [%s] %s", w.day, payload["type"], payload["name"])
+            logger.info("~ update %s [%s] %s", w.day, label, payload["name"])
             if not dry_run:
                 try:
                     update_event(icu, existing.id, payload)  # type: ignore[arg-type]

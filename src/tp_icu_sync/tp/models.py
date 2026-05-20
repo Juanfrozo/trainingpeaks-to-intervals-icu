@@ -42,6 +42,7 @@ class TPWorkout(BaseModel):
     title: str | None = None
     description: str | None = None
     workoutTypeValueId: int | None = None
+    workoutSubTypeId: int | None = None
     totalTimePlanned: float | None = None  # hours
     distancePlanned: float | None = None  # metres
     tssPlanned: float | None = None
@@ -49,6 +50,8 @@ class TPWorkout(BaseModel):
     completed: bool | None = None
     structure: TPStructure | dict[str, Any] | None = None
     startTimePlanned: str | None = None
+    coachComments: str | None = None
+    workoutComments: list[dict[str, Any]] = Field(default_factory=list)
 
     @property
     def day(self) -> date:

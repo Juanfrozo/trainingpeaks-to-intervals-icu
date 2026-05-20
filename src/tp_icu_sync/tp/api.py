@@ -32,17 +32,8 @@ def list_planned_workouts(
             w = TPWorkout.model_validate(entry)
         except ValidationError as exc:
             raise TPApiError(f"Failed to parse TP workout {entry.get('workoutId')}: {exc}") from exc
-        # Planned only: no totalTime AND not flagged completed.
+        # Skip completed workouts — those become activities, owned by Garmin/Rouvy.
         if w.completed is True:
-            continue
-        # TP marks completion via totalTime/tssActual; ifPlanned/tssPlanned alone tell us it's planned.
-        # We accept workouts that have a planned duration/distance OR planned structure.
-        if (
-            w.totalTimePlanned is None
-            and w.distancePlanned is None
-            and w.structure is None
-            and w.tssPlanned is None
-        ):
             continue
         result.append(w)
     return result
