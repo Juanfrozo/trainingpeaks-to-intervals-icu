@@ -44,19 +44,31 @@ This is a **standalone Python CLI**. It does not depend on any other library or 
 
 ## Setup
 
-### 1. Clone and create a virtual environment
+### 1. Install
+
+**Recommended — global install with [uv](https://github.com/astral-sh/uv):**
+
+```bash
+git clone https://github.com/Sladck/trainingpeaks-to-intervals-icu.git
+uv tool install ./trainingpeaks-to-intervals-icu
+```
+
+This puts a `tp-icu-sync` executable on your `PATH` (typically `~/.local/bin/tp-icu-sync`), with its own isolated venv. You can call it from any directory.
+
+**Alternative — `pipx`:**
+
+```bash
+pipx install ./trainingpeaks-to-intervals-icu
+```
+
+**Alternative — local venv (no global install):**
 
 ```bash
 git clone https://github.com/Sladck/trainingpeaks-to-intervals-icu.git
 cd trainingpeaks-to-intervals-icu
-
-# With uv (recommended)
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -e .
-
-# Or with stdlib venv + pip
 python3 -m venv .venv
 .venv/bin/pip install -e .
+# Then invoke as .venv/bin/tp-icu-sync ...
 ```
 
 ### 2. Get your credentials
@@ -79,9 +91,19 @@ python3 -m venv .venv
 
 ### 3. Configure environment
 
+The CLI looks for a `.env` file in (first-match wins):
+
+1. `./.env` in the current directory
+2. `$XDG_CONFIG_HOME/tp-icu-sync/.env` (default `~/.config/tp-icu-sync/.env`) — **recommended for a global install**, so you can run `tp-icu-sync` from anywhere
+3. `~/.tp-icu-sync.env`
+
+You can also pass `--env-file PATH` to point at a specific file, or set the three variables directly in your shell environment.
+
 ```bash
-cp .env.example .env
-$EDITOR .env
+mkdir -p ~/.config/tp-icu-sync
+cp trainingpeaks-to-intervals-icu/.env.example ~/.config/tp-icu-sync/.env
+chmod 600 ~/.config/tp-icu-sync/.env
+$EDITOR ~/.config/tp-icu-sync/.env
 ```
 
 Fill in the three values:
@@ -92,22 +114,17 @@ ICU_API_KEY=...your key...
 ICU_ATHLETE_ID=i123456
 ```
 
-`.env` is in `.gitignore` and will not be committed.
-
 ## Usage
 
-```bash
-.venv/bin/tp-icu-sync --dry-run        # show diff, write nothing
-.venv/bin/tp-icu-sync                   # actually apply
-.venv/bin/tp-icu-sync --days 30         # bigger plan window
-.venv/bin/tp-icu-sync --activity-lookback 0  # disable activity-description sync
-.venv/bin/tp-icu-sync -v                # verbose / debug logs
-```
-
-Or after `source .venv/bin/activate`:
+After a global install you can call `tp-icu-sync` from anywhere:
 
 ```bash
-tp-icu-sync --dry-run
+tp-icu-sync --dry-run                # show diff, write nothing
+tp-icu-sync                          # actually apply
+tp-icu-sync --days 30                # bigger plan window
+tp-icu-sync --activity-lookback 0    # disable activity-description sync
+tp-icu-sync --env-file ./other.env   # use a different .env
+tp-icu-sync -v                       # verbose / debug logs
 ```
 
 Run it manually whenever you change your plan in TrainingPeaks (or schedule it via cron / systemd-timer).

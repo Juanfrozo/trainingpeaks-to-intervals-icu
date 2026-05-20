@@ -30,6 +30,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Look this many days into the past for paired-activity description sync (default: 14, 0 disables).",
     )
     p.add_argument(
+        "--env-file",
+        type=str,
+        default=None,
+        help="Path to a .env file. Default: ./.env, then ~/.config/tp-icu-sync/.env, then ~/.tp-icu-sync.env.",
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would change without writing to intervals.icu.",
@@ -51,8 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        cfg = Config.load()
-    except RuntimeError as exc:
+        cfg = Config.load(env_file=args.env_file)
+    except (RuntimeError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
