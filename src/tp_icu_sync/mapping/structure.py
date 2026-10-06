@@ -155,8 +155,9 @@ def _convert_to_absolute(
             pace_unit = "s/100m" if is_swim else "s/km"
             # lo (%): slower bound  -> slower pace (larger s)
             # hi (%): faster bound  -> faster pace (smaller s)
-            slow_pace = round(distance_m / (v_thr * lo / 100)) if lo is not None else None
-            fast_pace = round(distance_m / (v_thr * hi / 100)) if hi is not None else None
+            # A 0% bound means "open" (no limit) in TP; skip it instead of dividing by zero.
+            slow_pace = round(distance_m / (v_thr * lo / 100)) if lo else None
+            fast_pace = round(distance_m / (v_thr * hi / 100)) if hi else None
             # icu convention: value = fast (low s), max_value = slow (high s).
             # Use whichever bound is available; if both, present (fast, slow).
             a_lo = fast_pace if fast_pace is not None else slow_pace
